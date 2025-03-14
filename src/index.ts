@@ -134,10 +134,16 @@ server.tool(
 async function runServer() {
   const transport = new StdioServerTransport();
   await server.connect(transport);
-  console.error("Linkedin MCP Server running on stdio");
+  server.server.sendLoggingMessage({
+    level: "info",
+    data: "Linkedin MCP Server running on stdio",
+  });
 }
 
 runServer().catch((error) => {
-  console.error("Fatal error in main():", error);
+  server.server.sendLoggingMessage({
+    level: "error",
+    data: `Fatal error in runServer(): ${error}`,
+  });
   process.exit(1);
 });
