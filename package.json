@@ -1,0 +1,31 @@
+{
+  "name": "mcp-server-linkedin",
+  "version": "0.1.0",
+  "description": "MCP server for interacting with Linkedin API",
+  "private": true,
+  "type": "module",
+  "bin": {
+    "mcp-server-linkedin": "./build/index.js"
+  },
+  "files": [
+    "build"
+  ],
+  "scripts": {
+    "build": "tsc && node -e \"require('fs').chmodSync('build/index.js', '755')\"",
+    "prepare": "npm run build",
+    "watch": "tsc --watch",
+    "dev": "tsx src/index.ts",
+    "inspector": "npx @modelcontextprotocol/inspector pnpm run dev"
+  },
+  "dependencies": {
+    "@modelcontextprotocol/sdk": "1.7.0",
+    "axios": "^1.8.3",
+    "linkedin-api-client": "^0.3.0",
+    "zod": "^3.24.2"
+  },
+  "devDependencies": {
+    "@types/node": "^20.11.24",
+    "tsx": "^4.19.3",
+    "typescript": "^5.3.3"
+  }
+}
