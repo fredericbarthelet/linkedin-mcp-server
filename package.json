@@ -12,18 +12,21 @@
   ],
   "scripts": {
     "build": "tsc && node -e \"require('fs').chmodSync('build/index.js', '755')\"",
-    "prepare": "npm run build",
-    "watch": "tsc --watch",
-    "dev": "tsx src/index.ts",
-    "inspector": "npx @modelcontextprotocol/inspector pnpm run dev"
+    "dev": "tsx watch --env-file=.env src/index.ts",
+    "inspector": "npx @modelcontextprotocol/inspector"
   },
   "dependencies": {
     "@modelcontextprotocol/sdk": "1.7.0",
     "axios": "^1.8.3",
+    "express": "^4.21.2",
+    "jsonwebtoken": "^9.0.2",
     "linkedin-api-client": "^0.3.0",
+    "vitest": "^3.0.9",
     "zod": "^3.24.2"
   },
   "devDependencies": {
+    "@types/express": "^5.0.0",
+    "@types/jsonwebtoken": "^9.0.9",
     "@types/node": "^20.11.24",
     "tsx": "^4.19.3",
     "typescript": "^5.3.3"

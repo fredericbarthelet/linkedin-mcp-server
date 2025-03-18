@@ -1,12 +1,15 @@
 import { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
-import { StdioServerTransport } from "@modelcontextprotocol/sdk/server/stdio.js";
+import { SSEServerTransport } from "@modelcontextprotocol/sdk/server/sse.js";
 import { CallToolResult } from "@modelcontextprotocol/sdk/types.js";
 import axios, { isAxiosError } from "axios";
 import { z } from "zod";
 import { RestliClient as LinkedinClient } from "linkedin-api-client";
+import express from "express";
+import { mcpAuthRouter } from "@modelcontextprotocol/sdk/server/auth/router.js";
+import { requireBearerAuth } from "@modelcontextprotocol/sdk/server/auth/middleware/bearerAuth.js";
+import { OAuthServerProvider } from "./auth/OAuthServerProvider.js";
 
 const linkedinClient = new LinkedinClient();
-const linkedinAccessToken = process.env.LINKEDIN_ACCESS_TOKEN as string;
 
 // Create an MCP server
 const server = new McpServer(
@@ -17,7 +20,21 @@ const server = new McpServer(
   { capabilities: { tools: { listChanged: true } } }
 );
 
-// Add an addition tool
+const provider = new OAuthServerProvider({
+  clientId: process.env.LINKEDIN_CLIENT_ID as string,
+  clientSecret: process.env.LINKEDIN_CLIENT_SECRET as string,
+  redirectUrl: "http://localhost:3001/callback",
+});
+
+const app = express();
+app.use(
+  mcpAuthRouter({
+    issuerUrl: new URL("http://localhost:3001"),
+    provider,
+  })
+);
+
+// Add user-info tool
 server.tool(
   "user-info",
   "Get information about currently logged in LinkedIn user",
@@ -33,7 +50,7 @@ server.tool(
             "profilePicture(displayImage~digitalmediaAsset:playableStreams)",
           ].join(",")})`,
         },
-        accessToken: linkedinAccessToken,
+        accessToken: "token.access_token",
       });
       const {
         localizedHeadline,
@@ -130,20 +147,43 @@ server.tool(
   }
 );
 
-// Start receiving messages on stdin and sending messages on stdout
-async function runServer() {
-  const transport = new StdioServerTransport();
-  await server.connect(transport);
-  server.server.sendLoggingMessage({
-    level: "info",
-    data: "Linkedin MCP Server running on stdio",
-  });
-}
+let transport: SSEServerTransport;
 
-runServer().catch((error) => {
-  server.server.sendLoggingMessage({
-    level: "error",
-    data: `Fatal error in runServer(): ${error}`,
-  });
-  process.exit(1);
+app.get("/callback", async ({ query: { code, state } }, res) => {
+  if (
+    !code ||
+    !state ||
+    typeof code !== "string" ||
+    typeof state !== "string"
+  ) {
+    res.status(400).send("Invalid request parameters");
+    return;
+  }
+
+  await provider.callback(code, state, res);
+});
+
+app.get(
+  "/sse",
+  requireBearerAuth({ provider, requiredScopes: [] }),
+  async (_req, res) => {
+    transport = new SSEServerTransport("/messages", res);
+    await server.connect(transport);
+  }
+);
+
+app.post(
+  "/messages",
+  requireBearerAuth({ provider, requiredScopes: [] }),
+  async (req, res) => {
+    if (!transport) {
+      res.status(400).send("No transport found");
+      return;
+    }
+    await transport.handlePostMessage(req, res);
+  }
+);
+
+app.listen(3001, () => {
+  console.log("Server running on port 3001");
 });
