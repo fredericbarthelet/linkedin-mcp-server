@@ -1,11 +1,11 @@
 {
-  "name": "mcp-server-linkedin",
+  "name": "linkedin-mcp-server",
   "version": "0.1.0",
-  "description": "MCP server for interacting with Linkedin API",
+  "description": "MCP server for interacting with Linkedin Marketing API",
   "private": true,
   "type": "module",
   "bin": {
-    "mcp-server-linkedin": "./build/index.js"
+    "linkedin-mcp-server": "./build/index.js"
   },
   "files": [
     "build"

@@ -1,5 +1,5 @@
 node_modules/
 build/
 *.log
-.env*
+.env
 .cursor/mcp.json
