@@ -12,7 +12,7 @@ import { SessionsStore } from "./SessionsStore.js";
 import { TokensStore } from "./TokenStore.js";
 
 export class OAuthServerProvider implements OAuthServerProviderInterface {
-  private _LINKEDIN_SCOPES = ["r_basicprofile"];
+  private _LINKEDIN_SCOPES = ["r_basicprofile", "w_member_social"];
   private _linkedinAuthClient: LinkedinAuthClient;
 
   private _clientsStore: ClientsStore;

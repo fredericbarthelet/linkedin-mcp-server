@@ -16,6 +16,15 @@ export class Tools {
       description: "Get information about currently logged in LinkedIn user",
       inputSchema: { type: "object" },
     },
+    {
+      name: "create-post",
+      description: "Create a new post on LinkedIn",
+      inputSchema: {
+        type: "object",
+        properties: { content: { type: "string" } },
+        required: ["content"],
+      },
+    },
   ];
 
   public userInfo = async (linkedinTokens: OAuthTokens) => {
@@ -92,6 +101,83 @@ export class Tools {
       }
 
       return { content };
+    } catch (e) {
+      if (isAxiosError(e)) {
+        return {
+          isError: true,
+          content: [
+            {
+              type: "text",
+              text: `[${e.response?.status} ${e.response?.statusText}] Linkedin API error: ${e.response?.data?.message}`,
+            },
+          ],
+        };
+      }
+
+      if (e instanceof z.ZodError) {
+        return {
+          isError: true,
+          content: [
+            {
+              type: "text",
+              text: `Unexpected Linkedin API response format: ${JSON.stringify(
+                e.issues
+              )}`,
+            },
+          ],
+        };
+      }
+
+      return {
+        isError: true,
+        content: [{ type: "text", text: JSON.stringify(e) }],
+      };
+    }
+  };
+
+  public createPost = async (
+    post: { content: string },
+    linkedinTokens: OAuthTokens
+  ) => {
+    try {
+      const { data } = await this._linkedinClient.get({
+        resourcePath: "/me",
+        queryParams: {
+          projection: "(id)",
+        },
+        accessToken: linkedinTokens.access_token,
+      });
+      const { id: personId } = await z
+        .object({
+          id: z.string(),
+        })
+        .parse(data);
+
+      await this._linkedinClient.create({
+        resourcePath: "/posts",
+        entity: {
+          author: `urn:li:person:${personId}`,
+          commentary: post.content,
+          visibility: "PUBLIC",
+          distribution: {
+            feedDistribution: "MAIN_FEED",
+            targetEntities: [],
+            thirdPartyDistributionChannels: [],
+          },
+          lifecycleState: "PUBLISHED",
+          isReshareDisabledByAuthor: false,
+        },
+        accessToken: linkedinTokens.access_token,
+      });
+
+      return {
+        content: [
+          {
+            type: "text",
+            text: "Your post has been successfully created!",
+          },
+        ],
+      };
     } catch (e) {
       if (isAxiosError(e)) {
         return {

@@ -7,10 +7,7 @@ import getRawBody from "raw-body";
 
 import { OAuthServerProvider } from "./auth/OAuthServerProvider.js";
 import { Tools } from "./mcp/Tools.js";
-import {
-  CallToolRequestSchema,
-  Tool,
-} from "@modelcontextprotocol/sdk/types.js";
+import { CallToolRequestSchema } from "@modelcontextprotocol/sdk/types.js";
 import { ListToolsRequestSchema } from "@modelcontextprotocol/sdk/types.js";
 import { OAuthTokens } from "@modelcontextprotocol/sdk/shared/auth.js";
 
@@ -53,6 +50,11 @@ server.setRequestHandler(CallToolRequestSchema, async (request) => {
   switch (name) {
     case "user-info":
       return tools.userInfo(linkedinTokens);
+    case "create-post":
+      return tools.createPost(
+        request.params.arguments as { content: string },
+        linkedinTokens
+      );
     default:
       throw new Error(`Tool ${name} not found`);
   }
