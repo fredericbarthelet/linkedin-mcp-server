@@ -16,7 +16,11 @@ const server = new McpServer(
     name: "Linkedin",
     version: "0.1.0",
   },
-  { capabilities: { tools: { listChanged: true } } }
+  {
+    capabilities: { tools: { listChanged: true } },
+    instructions:
+      "This MCP server can help with LinkedIn related tasks. It can get informations on the currently logged in user and create posts on his behalf.",
+  }
 );
 
 const provider = new OAuthServerProvider({
