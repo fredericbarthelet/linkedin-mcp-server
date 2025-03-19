@@ -1,18 +1,21 @@
-import { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
+import { Server } from "@modelcontextprotocol/sdk/server/index.js";
 import { SSEServerTransport } from "@modelcontextprotocol/sdk/server/sse.js";
-import { CallToolResult } from "@modelcontextprotocol/sdk/types.js";
-import axios, { isAxiosError } from "axios";
-import { z } from "zod";
-import { RestliClient as LinkedinClient } from "linkedin-api-client";
-import express from "express";
 import { mcpAuthRouter } from "@modelcontextprotocol/sdk/server/auth/router.js";
 import { requireBearerAuth } from "@modelcontextprotocol/sdk/server/auth/middleware/bearerAuth.js";
-import { OAuthServerProvider } from "./auth/OAuthServerProvider.js";
+import express from "express";
+import getRawBody from "raw-body";
 
-const linkedinClient = new LinkedinClient();
+import { OAuthServerProvider } from "./auth/OAuthServerProvider.js";
+import { Tools } from "./mcp/Tools.js";
+import {
+  CallToolRequestSchema,
+  Tool,
+} from "@modelcontextprotocol/sdk/types.js";
+import { ListToolsRequestSchema } from "@modelcontextprotocol/sdk/types.js";
+import { OAuthTokens } from "@modelcontextprotocol/sdk/shared/auth.js";
 
 // Create an MCP server
-const server = new McpServer(
+const server = new Server(
   {
     name: "Linkedin",
     version: "0.1.0",
@@ -34,118 +37,27 @@ app.use(
   })
 );
 
-// Add user-info tool
-server.tool(
-  "user-info",
-  "Get information about currently logged in LinkedIn user",
-  async () => {
-    try {
-      const { data } = await linkedinClient.get({
-        resourcePath: "/me",
-        queryParams: {
-          projection: `(${[
-            "localizedFirstName",
-            "localizedLastName",
-            "localizedHeadline",
-            "profilePicture(displayImage~digitalmediaAsset:playableStreams)",
-          ].join(",")})`,
-        },
-        accessToken: "token.access_token",
-      });
-      const {
-        localizedHeadline,
-        localizedFirstName,
-        localizedLastName,
-        profilePicture,
-      } = await z
-        .object({
-          localizedHeadline: z.string(),
-          localizedFirstName: z.string(),
-          localizedLastName: z.string(),
-          profilePicture: z
-            .object({
-              "displayImage~": z.object({
-                elements: z.array(
-                  z.object({
-                    identifiers: z.tuple([
-                      z.object({
-                        identifier: z.string().url(),
-                      }),
-                    ]),
-                  })
-                ),
-              }),
-            })
-            .transform(async (profilePicture) => {
-              const profilePicureUrl = profilePicture["displayImage~"].elements
-                .pop()
-                ?.identifiers.pop()?.identifier;
-              if (!profilePicureUrl) {
-                return undefined;
-              }
+server.setRequestHandler(ListToolsRequestSchema, async () => ({
+  tools: Tools.TOOLS,
+}));
 
-              const { data, headers } = await axios.get(profilePicureUrl, {
-                responseType: "arraybuffer",
-              });
-              const mimeType = headers["content-type"];
-              const base64Data = Buffer.from(data, "binary").toString("base64");
-              return { mimeType, data: base64Data };
-            }),
-        })
-        .parseAsync(data);
+server.setRequestHandler(CallToolRequestSchema, async (request) => {
+  console.log("request", request);
+  const tools = new Tools();
+  const { name, extra } = request.params;
+  const { linkedinTokens } = extra as { linkedinTokens?: OAuthTokens };
 
-      const content: CallToolResult["content"] = [
-        {
-          type: "text",
-          text: `Currently logged in user is ${[
-            localizedFirstName,
-            localizedLastName,
-          ].join(" ")} - ${localizedHeadline}`,
-        },
-      ];
-
-      if (profilePicture) {
-        content.push({
-          type: "image",
-          ...profilePicture,
-        });
-      }
-
-      return { content };
-    } catch (e) {
-      if (isAxiosError(e)) {
-        return {
-          isError: true,
-          content: [
-            {
-              type: "text",
-              text: `[${e.response?.status} ${e.response?.statusText}] Linkedin API error: ${e.response?.data?.message}`,
-            },
-          ],
-        };
-      }
-
-      if (e instanceof z.ZodError) {
-        return {
-          isError: true,
-          content: [
-            {
-              type: "text",
-              text: `Unexpected Linkedin API response format: ${JSON.stringify(
-                e.issues
-              )}`,
-            },
-          ],
-        };
-      }
-
-      return {
-        isError: true,
-        content: [{ type: "text", text: JSON.stringify(e) }],
-      };
-    }
+  if (!linkedinTokens) {
+    throw new Error("No linkedin tokens found");
   }
-);
+
+  switch (name) {
+    case "user-info":
+      return tools.userInfo(linkedinTokens);
+    default:
+      throw new Error(`Tool ${name} not found`);
+  }
+});
 
 let transport: SSEServerTransport;
 
@@ -176,11 +88,25 @@ app.post(
   "/messages",
   requireBearerAuth({ provider, requiredScopes: [] }),
   async (req, res) => {
+    console.log("req.auth", req.auth);
     if (!transport) {
       res.status(400).send("No transport found");
       return;
     }
-    await transport.handlePostMessage(req, res);
+    const rawBody = await getRawBody(req, {
+      limit: "1mb",
+      encoding: "utf-8",
+    });
+
+    const messageBody = JSON.parse(rawBody.toString());
+    if (!messageBody.params) {
+      messageBody.params = {};
+    }
+    messageBody.params.extra = (
+      req.auth as unknown as { extra: { linkedinTokens?: OAuthTokens } }
+    )?.extra;
+
+    await transport.handlePostMessage(req, res, messageBody);
   }
 );
 

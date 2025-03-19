@@ -23,6 +23,9 @@ importers:
       linkedin-api-client:
         specifier: ^0.3.0
         version: 0.3.0
+      raw-body:
+        specifier: ^3.0.0
+        version: 3.0.0
       vitest:
         specifier: ^3.0.9
         version: 3.0.9(@types/node@20.17.24)(tsx@4.19.3)

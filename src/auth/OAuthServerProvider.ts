@@ -110,14 +110,17 @@ export class OAuthServerProvider implements OAuthServerProviderInterface {
   };
 
   public verifyAccessToken = async (accessToken: string) => {
-    const { aud, exp, scopes } =
+    const { jti, aud, exp, scopes } =
       this._tokensStore.parseAccessToken(accessToken);
+
+    const linkedinTokens = this._tokensStore.getTokens(jti)?.linkedinTokens;
 
     return {
       token: accessToken,
       clientId: aud,
       scopes: scopes ?? [],
       expiresAt: exp,
+      extra: { linkedinTokens },
     };
   };
 
