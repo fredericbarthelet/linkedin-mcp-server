@@ -42,7 +42,6 @@ server.setRequestHandler(ListToolsRequestSchema, async () => ({
 }));
 
 server.setRequestHandler(CallToolRequestSchema, async (request) => {
-  console.log("request", request);
   const tools = new Tools();
   const { name, extra } = request.params;
   const { linkedinTokens } = extra as { linkedinTokens?: OAuthTokens };
@@ -88,7 +87,6 @@ app.post(
   "/messages",
   requireBearerAuth({ provider, requiredScopes: [] }),
   async (req, res) => {
-    console.log("req.auth", req.auth);
     if (!transport) {
       res.status(400).send("No transport found");
       return;
