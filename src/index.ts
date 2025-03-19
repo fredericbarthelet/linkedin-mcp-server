@@ -1,18 +1,17 @@
-import { Server } from "@modelcontextprotocol/sdk/server/index.js";
-import { SSEServerTransport } from "@modelcontextprotocol/sdk/server/sse.js";
+import { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
 import { mcpAuthRouter } from "@modelcontextprotocol/sdk/server/auth/router.js";
 import { requireBearerAuth } from "@modelcontextprotocol/sdk/server/auth/middleware/bearerAuth.js";
-import express from "express";
-import getRawBody from "raw-body";
-
-import { OAuthServerProvider } from "./auth/OAuthServerProvider.js";
-import { Tools } from "./mcp/Tools.js";
-import { CallToolRequestSchema } from "@modelcontextprotocol/sdk/types.js";
-import { ListToolsRequestSchema } from "@modelcontextprotocol/sdk/types.js";
 import { OAuthTokens } from "@modelcontextprotocol/sdk/shared/auth.js";
+import { AuthInfo } from "@modelcontextprotocol/sdk/server/auth/types.js";
+import express from "express";
+import { z } from "zod";
+
+import { Tools } from "./mcp/Tools.js";
+import { OAuthServerProvider } from "./auth/OAuthServerProvider.js";
+import { TransportsStore } from "./mcp/TransportsStore.js";
 
 // Create an MCP server
-const server = new Server(
+const server = new McpServer(
   {
     name: "Linkedin",
     version: "0.1.0",
@@ -26,6 +25,8 @@ const provider = new OAuthServerProvider({
   redirectUrl: "http://localhost:3001/callback",
 });
 
+const transportsStore = new TransportsStore();
+
 const app = express();
 app.use(
   mcpAuthRouter({
@@ -34,33 +35,42 @@ app.use(
   })
 );
 
-server.setRequestHandler(ListToolsRequestSchema, async () => ({
-  tools: Tools.TOOLS,
-}));
+const tools = new Tools();
 
-server.setRequestHandler(CallToolRequestSchema, async (request) => {
-  const tools = new Tools();
-  const { name, extra } = request.params;
-  const { linkedinTokens } = extra as { linkedinTokens?: OAuthTokens };
+server.tool(
+  "user-info",
+  "Get information about currently logged in LinkedIn user",
+  async ({ sessionId }) => {
+    if (!sessionId) {
+      throw new Error("No sessionId found");
+    }
 
-  if (!linkedinTokens) {
-    throw new Error("No linkedin tokens found");
+    const { auth } = transportsStore.getTransport(sessionId);
+    const { linkedinTokens } = (
+      auth as unknown as { extra: { linkedinTokens: OAuthTokens } }
+    ).extra;
+
+    return tools.userInfo(linkedinTokens);
   }
+);
 
-  switch (name) {
-    case "user-info":
-      return tools.userInfo(linkedinTokens);
-    case "create-post":
-      return tools.createPost(
-        request.params.arguments as { content: string },
-        linkedinTokens
-      );
-    default:
-      throw new Error(`Tool ${name} not found`);
+server.tool(
+  "create-post",
+  "Create a new post on LinkedIn",
+  { content: z.string() },
+  async ({ content }, { sessionId }) => {
+    if (!sessionId) {
+      throw new Error("No sessionId found");
+    }
+
+    const { auth } = transportsStore.getTransport(sessionId);
+    const { linkedinTokens } = (
+      auth as unknown as { extra: { linkedinTokens: OAuthTokens } }
+    ).extra;
+
+    return tools.createPost({ content }, linkedinTokens);
   }
-});
-
-let transport: SSEServerTransport;
+);
 
 app.get("/callback", async ({ query: { code, state } }, res) => {
   if (
@@ -79,8 +89,12 @@ app.get("/callback", async ({ query: { code, state } }, res) => {
 app.get(
   "/sse",
   requireBearerAuth({ provider, requiredScopes: [] }),
-  async (_req, res) => {
-    transport = new SSEServerTransport("/messages", res);
+  async (req, res) => {
+    const transport = transportsStore.createTransport(
+      "/messages",
+      req.auth as AuthInfo,
+      res
+    );
     await server.connect(transport);
   }
 );
@@ -89,24 +103,14 @@ app.post(
   "/messages",
   requireBearerAuth({ provider, requiredScopes: [] }),
   async (req, res) => {
+    const sessionId = req.query.sessionId as string;
+    const { transport } = transportsStore.getTransport(sessionId);
     if (!transport) {
       res.status(400).send("No transport found");
       return;
     }
-    const rawBody = await getRawBody(req, {
-      limit: "1mb",
-      encoding: "utf-8",
-    });
 
-    const messageBody = JSON.parse(rawBody.toString());
-    if (!messageBody.params) {
-      messageBody.params = {};
-    }
-    messageBody.params.extra = (
-      req.auth as unknown as { extra: { linkedinTokens?: OAuthTokens } }
-    )?.extra;
-
-    await transport.handlePostMessage(req, res, messageBody);
+    await transport.handlePostMessage(req, res);
   }
 );
 

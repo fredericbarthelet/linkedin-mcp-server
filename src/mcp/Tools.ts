@@ -10,24 +10,9 @@ export class Tools {
     this._linkedinClient = new LinkedinClient();
   }
 
-  public static TOOLS: Tool[] = [
-    {
-      name: "user-info",
-      description: "Get information about currently logged in LinkedIn user",
-      inputSchema: { type: "object" },
-    },
-    {
-      name: "create-post",
-      description: "Create a new post on LinkedIn",
-      inputSchema: {
-        type: "object",
-        properties: { content: { type: "string" } },
-        required: ["content"],
-      },
-    },
-  ];
-
-  public userInfo = async (linkedinTokens: OAuthTokens) => {
+  public userInfo = async (
+    linkedinTokens: OAuthTokens
+  ): Promise<CallToolResult> => {
     try {
       const { data } = await this._linkedinClient.get({
         resourcePath: "/me",
@@ -138,7 +123,7 @@ export class Tools {
   public createPost = async (
     post: { content: string },
     linkedinTokens: OAuthTokens
-  ) => {
+  ): Promise<CallToolResult> => {
     try {
       const { data } = await this._linkedinClient.get({
         resourcePath: "/me",
